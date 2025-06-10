@@ -1,2 +1,2 @@
 # LACE-seq2
-Crosslinking site identification software for LACE-seq2 data.
+Crosslinking site identification software for LACE-seq2 data. To improve library compatibility and to tailor the protocol for cancer cell applications, we optimized the original LACE-seq method from Dr. Yuanchao Xue's lab, renaming the updated version LACE-seq2. LACE-seq2 could identify RNA binding protein targets using UV crosslinking and linear amplification of complementary DNA ends.
