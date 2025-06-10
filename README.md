@@ -1,4 +1,4 @@
-# LACE2_SE Workflow Pipeline
+# LACE-seq2 Workflow Pipeline
 
 ## Description
 
@@ -24,19 +24,37 @@ Crosslinking site identification software for LACE-seq2 data. To improve library
 - Basic bioinformatics tools (wget, tar, gzip)
 - Sufficient storage space for index files (~30GB recommended)
 
+## Environment Setup
+
+The pipeline uses a single Conda environment ("LACE2") containing required tools:
+
+- Cutadapt (adapter trimming)
+- FastQC (quality control)
+- Bowtie2 (rRNA removal)
+- STAR (alignment)
+- Samtools (BAM processing)
+- Bedtools (BED conversion)
+
+Piranha was install from Github separately.
+
+The pipeline requires:
+
+- STAR genome index for your species (hg38, mm10, or hg19)
+- Bowtie2 rRNA index
+
 ## Installation
 
 ### 1. Clone the repository
 
 ```bash
+cd the_dir_you_want_to_install_the_pipeline
 git clone https://github.com/princewang2018/LACE-seq2.git
 cd LACE-seq2
 chmod +x LACE2
 
-LACE2_PATH="/your/custom/path"
-sudo echo "export PATH=\$PATH:$NEW_PATH" >> ~/.bashrc
+LACE2_PATH=$(pwd)
+sudo echo "export PATH=\$PATH:$LACE2_PATH" >> ~/.bashrc
 source ~/.bashrc
-
 ```
 
 ### 2. Set up Conda environment
@@ -54,13 +72,13 @@ conda install -c bioconda \
     bowtie2=2.5.4 \
     bedtools=2.27.1 \
     -y
-    
-    
-OR With manba
+```
 
+OR install with manba
+
+```shell
 conda install -n base -c conda-forge mamba
-
-mamba create -n LACE2 python=3.8 -y
+mamba create -n LACE2 python=3.7.6 -y
 mamba activate LACE2
 mamba install -c bioconda cutadapt fastqc star samtools bowtie2 bedtools -y
 ```
@@ -71,49 +89,30 @@ Download and install Piranha as introduced in: https://github.com/smithlabcode/p
 
 ```shell
 git clone https://github.com/smithlabcode/piranha.git
+cd piranha
 
 ./configure
 make all
 make install
 make test
 
-cd /home/wzx/BIG_REF/biosoft/Piranha/piranha-1.2.1/bin
+cd ./bin
 chmod +x Piranha
 
-Piranha_PATH="/home/wzx/BIG_REF/biosoft/Piranha/piranha-1.2.1/bin"
+Piranha_PATH=$(pwd)
 sudo echo "export PATH=\$PATH:$Piranha_PATH" >> ~/.bashrc
 source ~/.bashrc
 ```
-
-
 
 ### 4. Verify installation
 
 ```bash
 conda activate LACE2
 cutadapt --version
-star --version
+STAR --version
 bowtie2 --version
-
+Piranha -help
 ```
-
-### 
-
-## Environment Setup
-
-The pipeline uses a single Conda environment ("LACE2") containing all required tools:
-
-- Cutadapt (adapter trimming)
-- FastQC (quality control)
-- Bowtie2 (rRNA removal)
-- STAR (alignment)
-- Samtools (BAM processing)
-- Bedtools (BED conversion)
-- Piranha (peak calling)
-
-The pipeline requires:
-- STAR genome index for your species (hg38, mm10, or hg19)
-- Bowtie2 rRNA index
 
 ## Index Files Deployment
 
@@ -129,10 +128,10 @@ wget https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/hg38.knownGen
 gunzip *.gz
 ```
 
-### 2. Build STAR indices
+### 2. Build STAR index
 
 ```bash
-conda activate LACE20000000000000000000.............
+conda activate LACE2
 STAR --runThreadN 16 \
      --runMode genomeGenerate \
      --genomeDir /path/to/your/STAR_index_hg38 \
@@ -141,32 +140,41 @@ STAR --runThreadN 16 \
      --sjdbOverhang 100
 ```
 
-OR you can directly download pre-build index.
+You can also directly download or use pre-build STAR index compatible with STAR (v2.7.3a).
 
-### 3. Build rRNA indices
+### 3. Build  bowtie2 index of rRNA
 
-First download rRNA sequences from NCBI or other databases:
+Pre-build index is available in our Github repository:
+
+```bash
+#Human rRNA index
+wget https://github.com/PrinceWang2018/Cen_rRNA/blob/master/Human_rRNA_bt2_index.tar.gz
+wget https://github.com/PrinceWang2018/Cen_rRNA/blob/master/Mouse_rRNA_bt2_index.tar.gz
+tar -zxvf Human_rRNA_bt2_index.tar.gz
+tar -zxvf Mouse_rRNA_bt2_index.tar.gz
+```
+
+You can also build the index by yourself. First download rRNA sequences from NCBI according to the instructions:
+
+> https://ucdavis-bioinformatics-training.github.io/2017-June-RNA-Seq-Workshop/wednesday/contamination.html
+
+or our Github repository:
 
 ```bash
 # Download appropriate rRNA sequences for your organism
-wget https://path/to/rRNA_sequences.fa
-wget RNA_AND_TAXONOMY9606_AND_so_rna_type_nameRRNA.fasta.gz
+wget https://github.com/PrinceWang2018/Cen_rRNA/blob/master/Human_rRNA_NCBI.fasta.gz
+wget https://github.com/PrinceWang2018/Cen_rRNA/blob/master/Mouse_rRNA_NCBI.fasta.gz
+gzip -d Human_rRNA_NCBI.fasta.gz
+gzip -d Mouse_rRNA_NCBI.fasta.gz
 ```
 
 Then build Bowtie2 index:
 
 ```bash
 conda activate LACE2
-bowtie2-build rRNA_sequences.fa Cen_rRNA
+bowtie2-build Human_rRNA_NCBI.fasta ./Human_rRNA_bt2_index/Human_rRNA
+bowtie2-build Mouse_rRNA_NCBI.fasta ./Mouse_rRNA_bt2_index/Mouse_rRNA
 ```
-
-OR you can directly download our pre-build index:
-
-```bash
-wget https://github.com/PrinceWang2018/Cen_rRNA/blob/master/Cen_rRNA.zip
-```
-
-
 
 ## Input Data Organization
 
@@ -186,25 +194,11 @@ work_directory/
 
 ## Running the Pipeline
 
-For Demo data:
-
-```bash
-conda activate LACE2
-#export PATH=/home/wzx/project16t_new/CD47/LACE-seq2-HNRNPA1-Merge-final-20250101/Test_Demo:$PATH
-cd /home/wzx/project16t_new/CD47/LACE-seq2-HNRNPA1-Merge-final-20250101/Test_Demo
-LACE2 \
-  -w /home/wzx/project16t_new/CD47/LACE-seq2-HNRNPA1-Merge-final-20250101/Test_Demo \
-  -s /home/wzx/BIG_REF/index_STAR_hg38/ \
-  -r /home/wzx/BIG_REF/ncRNA_fasta/index/Cen_rRNA \
-  -t 16 \
-  -p 0.001 \
-  -b 20
-```
-
 Basic command:
 
 ```bash
 conda activate LACE2
+cd /path/to/work_directory #Containing 01.RawData as above
 LACE2 \
   -w /path/to/work_directory \
   -s /path/to/STAR_index_directory \
@@ -226,20 +220,11 @@ Parameters:
 
 A small test dataset is available at Github. To run the demo:
 
-1. Download and prepare test data:
-
 ```bash
-mkdir -p test_run/01.RawData/test_sample
-cd test_run/01.RawData/test_sample
-wget [link_to_test_R1].gz -O test_sample_1.fq.gz
-wget [link_to_test_R2].gz -O test_sample_2.fq.gz
-```
-
-2. Run the pipeline:
-
-```bash
+conda activate LACE2
+cd $LACE2_PATH/Demo_data
 LACE2 \
-  -w $(pwd)/Test_Demo \
+  -w $LACE2_PATH/Demo_data \
   -s /path/to/STAR_index_directory \
   -r /path/to/rRNA_index_prefix \
   -t 16 \
