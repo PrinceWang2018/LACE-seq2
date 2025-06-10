@@ -1,0 +1,273 @@
+#!/bin/bash
+#SBATCH -o job.%j.out
+#SBATCH -p princewang
+#SBATCH --qos=low
+#SBATCH -J LACE2_SE_workflow
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --mail-type=END
+#SBATCH --mail-user=wangzixiang@sdu.edu.cn
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH --comment=microAS_workflow
+
+set -euo pipefail  # Enable strict error checking
+
+
+
+VERSION="1.0.1"
+AUTHOR="Zixiang Wang"
+DATE=$(date +"%Y-%m-%d")
+
+echo "#######################################################################"
+echo "# LACE-seq2 Workflow Pipeline v${VERSION}"
+echo "# Author: ${AUTHOR}"
+echo "# Date: ${DATE}"
+echo "# Using single LACE2 conda environment"
+echo ""
+echo "# You are welcome to reference: github/princewang2018/LACE-seq2 "
+echo ""
+echo "# Every day may not be good, but there's something good in every day."
+echo "#######################################################################"
+echo ""
+echo "Starting run at: $(date)"
+echo ""
+
+# Function to display usage
+usage() {
+    echo "Usage: $0 [options]"
+    echo ""
+    echo "Required parameters:"
+    echo "  -w, --work-dir      Working directory containing 01.RawData folder"
+    echo "  -s, --star-index    Path to STAR index directory"
+    echo "  -r, --rrna-index    Path to Bowtie2 rRNA index prefix"
+    echo ""
+    echo "Optional parameters:"
+    echo "  -t, --threads       Number of threads (default: 8)"
+    echo "  -p, --piranha-p     Piranha -p parameter (default: 0.001)"
+    echo "  -b, --piranha-b     Piranha -b parameter (default: 20)"
+    echo "  -h, --help          Display this help message"
+    echo ""
+    echo "Example:"
+    echo "  $0 -w /path/to/workdir -s /path/to/STAR_index -r /path/to/rRNA_index"
+    exit 1
+}
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    key="$1"
+    case $key in
+        -w|--work-dir)
+        WORK_DIR="$2"
+        shift; shift
+        ;;
+        -s|--star-index)
+        STAR_INDEX="$2"
+        shift; shift
+        ;;
+        -r|--rrna-index)
+        RRNA_INDEX="$2"
+        shift; shift
+        ;;
+        -t|--threads)
+        THREADS="$2"
+        shift; shift
+        ;;
+        -p|--piranha-p)
+        PIRANHA_P="$2"
+        shift; shift
+        ;;
+        -b|--piranha-b)
+        PIRANHA_B="$2"
+        shift; shift
+        ;;
+        -h|--help)
+        usage
+        ;;
+        *)
+        echo "Unknown option: $1"
+        usage
+        ;;
+    esac
+done
+
+# Set default values
+THREADS=${THREADS:-8}
+PIRANHA_P=${PIRANHA_P:-0.001}
+PIRANHA_B=${PIRANHA_B:-20}
+
+# Validate required parameters
+if [[ -z "${WORK_DIR:-}"  || -z "${STAR_INDEX:-}" || -z "${RRNA_INDEX:-}" ]]; then
+    echo "Error: Missing required parameters!"
+    usage
+fi
+
+
+
+# Check if work directory exists
+if [[ ! -d "${WORK_DIR}/01.RawData" ]]; then
+    echo "Error: 01.RawData directory not found in ${WORK_DIR}"
+    exit 1
+fi
+
+# Load conda environment
+source /home/wzx/miniconda3/etc/profile.d/conda.sh
+conda activate LACE2  # Single environment for all tools
+
+
+# Check if required tools are available
+check_command() {
+    if ! command -v "$1" &> /dev/null; then
+        echo "Error: $1 could not be found. Please install it or add to PATH."
+        exit 1
+    fi
+}
+
+echo "Checking required tools..."
+check_command cutadapt
+check_command fastqc
+check_command bowtie2
+check_command STAR
+check_command samtools
+check_command bamToBed
+check_command Piranha
+
+# Create output directory structure
+echo "Creating output directories..."
+mkdir -p "${WORK_DIR}/1remove_adapter"
+mkdir -p "${WORK_DIR}/2remove_A"
+mkdir -p "${WORK_DIR}/3QC"
+mkdir -p "${WORK_DIR}/4rmr"
+mkdir -p "${WORK_DIR}/5Align"
+mkdir -p "${WORK_DIR}/8Piranha"
+
+# Log parameters
+echo "Parameters:"
+echo "  Work directory: ${WORK_DIR}"
+echo "  STAR index: ${STAR_INDEX}"
+echo "  rRNA index: ${RRNA_INDEX}"
+echo "  Threads: ${THREADS}"
+echo "  Piranha -p: ${PIRANHA_P}"
+echo "  Piranha -b: ${PIRANHA_B}"
+echo ""
+
+# Function to run commands with error checking
+run_command() {
+    local cmd="$@"
+    echo "Running: ${cmd}"
+    if ! eval "${cmd}"; then
+        echo "Error: Command failed: ${cmd}"
+        exit 1
+    fi
+}
+
+# Step 1: Trim adaptor
+echo "Step 1: Trim adaptor"
+cd "${WORK_DIR}/01.RawData"
+
+for SAMPLE in $(ls -d */ | sed 's|/||'); do
+    echo "Processing sample: ${SAMPLE}"
+    run_command "cutadapt -a AGATCGGAAGAGCACACGTCTGAACTCCAGTCA \
+        -A AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT \
+        -j ${THREADS} \
+        -q 30,0 \
+        --trim-n \
+        --max-n 0.25 \
+        -o ${WORK_DIR}/1remove_adapter/${SAMPLE}_1_trim.fastq.gz \
+        -p ${WORK_DIR}/1remove_adapter/${SAMPLE}_2_trim.fastq.gz \
+        ${WORK_DIR}/01.RawData/${SAMPLE}/${SAMPLE}_1.fq.gz \
+        ${WORK_DIR}/01.RawData/${SAMPLE}/${SAMPLE}_2.fq.gz > ${WORK_DIR}/1remove_adapter/${SAMPLE}_cutadapt.log 2>&1"
+done
+
+# Step 2: Trim polyA
+echo "Step 2: Trim polyA"
+for SAMPLE in $(ls -d */ | sed 's|/||'); do
+    echo "Processing sample: ${SAMPLE}"
+    run_command "cutadapt -a A{15} \
+        -G T{15} \
+        -m 18 \
+        -n 2 \
+        -j ${THREADS} \
+        -o ${WORK_DIR}/2remove_A/${SAMPLE}_1_trimA.fastq.gz \
+        -p ${WORK_DIR}/2remove_A/${SAMPLE}_2_trimA.fastq.gz \
+        ${WORK_DIR}/1remove_adapter/${SAMPLE}_1_trim.fastq.gz \
+        ${WORK_DIR}/1remove_adapter/${SAMPLE}_2_trim.fastq.gz > ${WORK_DIR}/2remove_A/${SAMPLE}_polyA_trim.log 2>&1"
+done
+
+# Step 3: Sequence QC
+echo "Step 3: Sequence QC"
+run_command "fastqc -t ${THREADS} -o ${WORK_DIR}/3QC ${WORK_DIR}/2remove_A/*gz"
+
+# Step 4: Remove rRNA
+echo "Step 4: Remove rRNA"
+for SAMPLE in $(ls -d */ | sed 's|/||'); do
+    echo "Processing sample: ${SAMPLE}"
+    run_command "bowtie2 -x ${RRNA_INDEX} \
+        --un-conc-gz ${WORK_DIR}/4rmr/${SAMPLE}_rmrRNA.fastq.gz \
+        -1 ${WORK_DIR}/2remove_A/${SAMPLE}_1_trimA.fastq.gz \
+        -2 ${WORK_DIR}/2remove_A/${SAMPLE}_2_trimA.fastq.gz \
+        -p ${THREADS} \
+        -S ${WORK_DIR}/4rmr/${SAMPLE}_tmp_rRNA.sam >> ${WORK_DIR}/4rmr/rmr_bt2.log 2>&1"
+    rm -f "${WORK_DIR}/4rmr/${SAMPLE}_tmp_rRNA.sam"
+done
+
+# Step 5: Alignment
+echo "Step 5: Alignment"
+
+for SAMPLE in $(ls -d */ | sed 's|/||'); do
+    echo "Processing sample: ${SAMPLE} "
+    run_command "STAR \
+        --genomeDir ${STAR_INDEX} \
+        --runThreadN ${THREADS} \
+        --readFilesIn ${WORK_DIR}/4rmr/${SAMPLE}_rmrRNA.fastq.1.gz \
+        --readFilesCommand zcat \
+        --outFileNamePrefix ${WORK_DIR}/5Align/${SAMPLE}_STAR_SE_ \
+        --outSAMtype BAM SortedByCoordinate \
+        --outWigType wiggle \
+        --outWigStrand Unstranded \
+        --outWigNorm RPM \
+        --outBAMsortingThreadN $((THREADS/2))"
+done
+
+# Step 6: Index bam file
+echo "Step 6: Index bam file"
+for BAM in ${WORK_DIR}/5Align/*.bam; do
+    run_command "samtools index ${BAM} -@ ${THREADS}"
+done
+
+# Step 7: Converting to bed
+echo "Step 7: Converting to bed"
+for BAM in ${WORK_DIR}/5Align/*.bam; do
+    run_command "bamToBed -i ${BAM} > ${BAM}.bed"
+done
+
+# Step 8: Call peak with Piranha
+echo "Step 8: Call peak with Piranha"
+for BED in ${WORK_DIR}/5Align/*.bam.bed; do
+    SAMPLE=$(basename ${BED} .bam.bed)
+    echo "Processing sample: ${SAMPLE}"
+    run_command "Piranha ${BED} \
+        -o ${WORK_DIR}/8Piranha/${SAMPLE}_Piranha_p${PIRANHA_P}_b${PIRANHA_B}.bed \
+        -s \
+        -p ${PIRANHA_P} \
+        -b ${PIRANHA_B} \
+        -d ZeroTruncatedNegativeBinomial \
+        -v > ${WORK_DIR}/8Piranha/${SAMPLE}_piranha.log 2>&1"
+done
+
+# Final cleanup and completion
+echo "Workflow completed successfully at: $(date)"
+touch "${WORK_DIR}/LACE2_SE_workflow.done"
+
+echo ""
+echo "#######################################################################"
+echo "# Output Summary"
+echo "#######################################################################"
+echo "# Adapter-trimmed files: ${WORK_DIR}/1remove_adapter/"
+echo "# PolyA-trimmed files: ${WORK_DIR}/2remove_A/"
+echo "# QC reports: ${WORK_DIR}/3QC/"
+echo "# rRNA-depleted files: ${WORK_DIR}/4rmr/"
+echo "# Aligned BAM files: ${WORK_DIR}/5Align/"
+echo "# Peak calls: ${WORK_DIR}/8Piranha/"
+echo "# Completion marker: ${WORK_DIR}/LACE2_SE_workflow.done"
+echo "#######################################################################"
