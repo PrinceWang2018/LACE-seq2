@@ -15,8 +15,8 @@ set -euo pipefail  # Enable strict error checking
 
 
 
-VERSION="1.0.1"
-AUTHOR="Zixiang Wang"
+VERSION="1.0.3"
+AUTHOR="Zixiang Wang, Lei Yang, Zhaojian Liu"
 DATE=$(date +"%Y-%m-%d")
 
 echo "#######################################################################"
@@ -110,9 +110,6 @@ if [[ ! -d "${WORK_DIR}/01.RawData" ]]; then
     exit 1
 fi
 
-# Load conda environment
-source /home/wzx/miniconda3/etc/profile.d/conda.sh
-conda activate LACE2  # Single environment for all tools
 
 
 # Check if required tools are available

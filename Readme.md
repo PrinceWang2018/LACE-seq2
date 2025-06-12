@@ -7,8 +7,8 @@ Crosslinking site identification software for LACE-seq2 data. To improve library
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [Installation](#installation)
-3. [Environment Setup](#environment-setup)
+2. [Environment Setup](#environment-setup)
+3. [Installation](#installation)
 4. [Index Files Deployment](#index-files-deployment)
 5. [Input Data Organization](#input-data-organization)
 6. [Running the Pipeline](#running-the-pipeline)
@@ -50,7 +50,7 @@ The pipeline requires:
 cd the_dir_you_want_to_install_the_pipeline
 git clone https://github.com/princewang2018/LACE-seq2.git
 cd LACE-seq2
-chmod +x LACE2
+chmod 777 LACE2
 
 LACE2_PATH=$(pwd)
 sudo echo "export PATH=\$PATH:$LACE2_PATH" >> ~/.bashrc
@@ -85,20 +85,43 @@ mamba install -c bioconda cutadapt fastqc star samtools bowtie2 bedtools -y
 
 ### 3. Install Piranha
 
-Download and install Piranha as introduced in: https://github.com/smithlabcode/piranha
+Download and install Piranha as introduced in:
+
+> https://github.com/smithlabcode/piranha
+>
+> https://blog.csdn.net/weixin_42035282/article/details/131708094
+
+#### 1) Install gsl
 
 ```shell
-git clone https://github.com/smithlabcode/piranha.git
-cd piranha
+wget https://ftp.gnu.org/gnu/gsl/gsl-2.7.1.tar.gz
+tar -zxvf gsl-2.7.1.tar.gz 
 
+mkdir -p /Path/to/install/gsl_gcc
+cd gsl-2.7.1
+ ./configure CC="gcc" --prefix=/Path/to/install/gsl_gcc
+make
+make install
+
+# Add environment variables
+export C_INCLUDE_PATH=$C_INCLUDE_PATH:/Path/to/install/gsl_gcc/include
+export CPLUS_INCLUDE_PATH=$CPLUS_INCLUDE_PATH:/Path/to/install/gsl_gcc/include
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH::/Path/to/install/gsl_gcc/lib
+export LIBRARY_PATH=$LIBRARY_PATH::/Path/to/install/gsl_gcc/lib
+```
+
+#### 2) Install Piranha
+
+```shell
+git clone --recursive https://github.com/smithlabcode/piranha.git
+
+cd ./piranha/
 ./configure
 make all
 make install
-make test
 
 cd ./bin
 chmod +x Piranha
-
 Piranha_PATH=$(pwd)
 sudo echo "export PATH=\$PATH:$Piranha_PATH" >> ~/.bashrc
 source ~/.bashrc
@@ -137,10 +160,10 @@ STAR --runThreadN 16 \
      --genomeDir /path/to/your/STAR_index_hg38 \
      --genomeFastaFiles refs/hg38/hg38.fa \
      --sjdbGTFfile refs/hg38/hg38.knownGene.gtf \
-     --sjdbOverhang 100
+     --sjdbOverhang 149
 ```
 
-You can also directly download or use pre-build STAR index compatible with STAR (v2.7.3a).
+You can also directly download or use pre-build STAR index compatible with STAR (corresponding version).
 
 ### 3. Build  bowtie2 index of rRNA
 
@@ -209,9 +232,9 @@ LACE2 \
 ```
 
 Parameters:
-- `-w`: Working directory containing 01.RawData folder
-- `-s`: Path to STAR index directory
-- `-r`: Path to Bowtie2 rRNA index prefix
+- `-w`: Working directory containing 01.RawData folder (**Must use absolute path**)
+- `-s`: Path to STAR index directory (Path)
+- `-r`: Path to Bowtie2 rRNA index prefix (Path and index prefix)
 - `-t`: Number of threads (default: 8)
 - `-p`: Piranha -p parameter (default: 0.001)
 - `-b`: Piranha -b parameter (default: 20)
@@ -271,4 +294,4 @@ If you use this pipeline in your research, please cite:
 
 > Wang, Z., Yang, L., Yang, S., Li, G., Xu, M., Kong, B., Shao, C., & Liu, Z. (2025). Isoform switch of CD47 provokes macrophage-mediated pyroptosis in ovarian cancer. bioRxiv, 2025.2004.2017.649282. https://doi.org/10.1101/2025.04.17.649282
 
-For questions or issues, please open an issue on GitHub or contact wangzixiang@sdu.edu.cn.
+For questions or issues, please open an issue on GitHub or contact 970214035yl@gmail.com, wangzixiang@sdu.edu.cn.
