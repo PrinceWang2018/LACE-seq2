@@ -78,7 +78,7 @@ OR install with manba
 
 ```shell
 conda install -n base -c conda-forge mamba
-mamba create -n LACE2 python=3.7.6 -y
+mamba create -n LACE2 -y
 mamba activate LACE2
 mamba install -c bioconda cutadapt fastqc star samtools bowtie2 bedtools -y
 ```
