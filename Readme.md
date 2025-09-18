@@ -1,5 +1,5 @@
 # LACE-seq2 Workflow Pipeline
-
+[![DOI](https://zenodo.org/badge/999354173.svg)](https://doi.org/10.5281/zenodo.17149288)
 ## Description
 
 Crosslinking site identification software for LACE-seq2 data. To improve library compatibility and to tailor the protocol for cancer cell applications, we optimized the original LACE-seq method from Dr. Yuanchao Xue's lab, renaming the updated version LACE-seq2. LACE-seq2 could identify RNA binding protein targets using UV crosslinking and linear amplification of complementary DNA ends. This pipeline processes paired-end RNA-seq data through adapter trimming, polyA trimming, quality control, rRNA removal, alignment, and peak calling. It's designed for analyzing LACE-seq2 or similar data.
